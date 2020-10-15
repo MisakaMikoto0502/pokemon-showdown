@@ -330,6 +330,7 @@ export const commands: ChatCommands = {
 				}
 				if (requiresForce(patch)) return this.errorReply(requiresForceMessage);
 
+				const oldPlugins = Chat.plugins;
 				Chat.destroy();
 
 				const processManagers = ProcessManager.processManagers;
@@ -346,7 +347,7 @@ export const commands: ChatCommands = {
 				global.Tournaments = require('../tournaments').Tournaments;
 
 				this.sendReply("Chat commands have been hot-patched.");
-				Chat.loadPlugins();
+				Chat.loadPlugins(oldPlugins);
 				this.sendReply("Chat plugins have been loaded.");
 			} else if (target === 'tournaments') {
 				if (lock['tournaments']) {
@@ -373,7 +374,7 @@ export const commands: ChatCommands = {
 				// reload .sim-dist/dex.js
 				global.Dex = require('../../sim/dex').Dex;
 				// rebuild the formats list
-				delete Rooms.global.formatList;
+				Rooms.global.formatList = '';
 				// respawn validator processes
 				void TeamValidatorAsync.PM.respawn();
 				// respawn simulator processes
@@ -848,7 +849,7 @@ export const commands: ChatCommands = {
 		} catch (e) {
 			// failed while rebasing or popping the stash
 			await exec(`git reset --hard ${oldHash}`);
-			await exec(`git stash pop`);
+			if (stashedChanges) await exec(`git stash pop`);
 			this.sendReply(`FAILED, old changes restored.`);
 		}
 		if (!isPrivate) await rebuild();

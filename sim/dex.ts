@@ -28,19 +28,6 @@
  * @license MIT license
  */
 
-// eslint-disable-next-line no-extend-native
-Object.defineProperty(Array.prototype, 'flatMap', {
-	value<T, U, W>(this: T[], callback: (this: W, item: T, index: number, array: T[]) => U[], thisArg: W): U[] {
-		const newArray = [];
-		for (let i = 0; i < this.length; i++) {
-			newArray.push(...callback.call(thisArg, this[i], i, this));
-		}
-		return newArray;
-	},
-	configurable: true,
-	writable: true,
-});
-
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -657,7 +644,7 @@ export class ModdedDex {
 			(this.data.Abilities.hasOwnProperty(id) && (found = this.data.Abilities[id]).condition) ||
 			(this.data.Items.hasOwnProperty(id) && (found = this.data.Items[id]).condition)
 		) {
-			effect = new Data.Condition({name: found.name || id}, found.condition!);
+			effect = new Data.Condition({name: found.name || id}, found.condition);
 		} else if (id === 'recoil') {
 			effect = new Data.Condition({id, name: 'Recoil', effectType: 'Recoil'});
 		} else if (id === 'drain') {
@@ -1158,7 +1145,6 @@ export class ModdedDex {
 	}
 
 	getTeamGenerator(format: Format | string, seed: PRNG | PRNGSeed | null = null) {
-		// eslint-disable-next-line @typescript-eslint/no-var-requires
 		const TeamGenerator = require(dexes['base'].forFormat(format).dataDir + '/random-teams').default;
 		return new TeamGenerator(format, seed);
 	}
@@ -1448,7 +1434,8 @@ export class ModdedDex {
 		let output = '';
 		for (const [i, mon] of team.entries()) {
 			const species = Dex.getSpecies(mon.species);
-			output += nicknames ? `${nicknames?.[i]} (${species.name})` : species.name;
+			const nickname = nicknames?.[i];
+			output += nickname && nickname !== species.baseSpecies ? `${nickname} (${species.name})` : species.name;
 			output += mon.item ? ` @ ${Dex.getItem(mon.item).name}<br />` : `<br />`;
 			output += `Ability: ${Dex.getAbility(mon.ability).name}<br />`;
 			if (typeof mon.happiness === 'number' && mon.happiness !== 255) output += `Happiness: ${mon.happiness}<br />`;
@@ -1475,7 +1462,6 @@ export class ModdedDex {
 	loadDataFile(basePath: string, dataType: DataType | 'Aliases'): AnyObject {
 		try {
 			const filePath = basePath + DATA_FILES[dataType];
-			// eslint-disable-next-line @typescript-eslint/no-var-requires
 			const dataObject = require(filePath);
 			if (!dataObject || typeof dataObject !== 'object') {
 				throw new TypeError(`${filePath}, if it exists, must export a non-null object`);
@@ -1493,7 +1479,6 @@ export class ModdedDex {
 	}
 
 	loadTextFile(name: string, exportName: string): AnyObject {
-		// eslint-disable-next-line @typescript-eslint/no-var-requires
 		return require(`${DATA_DIR}/text/${name}`)[exportName];
 	}
 

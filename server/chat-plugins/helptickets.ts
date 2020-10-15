@@ -1,5 +1,6 @@
 import {FS} from '../../lib/fs';
 import {Utils} from '../../lib/utils';
+import {getCommonBattles} from '../chat-commands/info';
 import type {Punishment} from '../punishments';
 
 const TICKET_FILE = 'config/tickets.json';
@@ -42,8 +43,7 @@ try {
 				continue;
 			}
 			// Close open tickets after a restart
-			// (i.e. if the server has been running for less than a minute)
-			if (ticket.open && process.uptime() <= 60) ticket.open = false;
+			if (ticket.open && !Chat.oldPlugins.helptickets) ticket.open = false;
 			tickets[t] = ticket;
 		}
 	}
@@ -86,7 +86,7 @@ export class HelpTicket extends Rooms.RoomGame {
 	constructor(room: ChatRoom, ticket: TicketState) {
 		super(room);
 		this.room = room;
-		this.room.settings.language = Users.get(ticket.creator)?.language || 'english';
+		this.room.settings.language = Users.get(ticket.creator)?.language || 'english' as ID;
 		this.title = `Help Ticket - ${ticket.type}`;
 		this.gameid = "helpticket" as ID;
 		this.allowRenames = true;
@@ -130,7 +130,8 @@ export class HelpTicket extends Rooms.RoomGame {
 			}
 			tickets[this.ticket.userid] = this.ticket;
 			writeTickets();
-			this.modnote(`${user.name} claimed this ticket.`, user);
+			this.room.modlog({action: 'TICKETCLAIM', isGlobal: true, loggedBy: user.id});
+			this.addText(`${user.name} claimed this ticket.`, user);
 			notifyStaff();
 		} else {
 			this.claimQueue.push(user.name);
@@ -147,11 +148,14 @@ export class HelpTicket extends Rooms.RoomGame {
 		if (toID(this.ticket.claimed) === user.id) {
 			if (this.claimQueue.length) {
 				this.ticket.claimed = this.claimQueue.shift() || null;
-				this.modnote(`This ticket is now claimed by ${this.ticket.claimed}.`, user);
+				this.room.modlog({action: 'TICKETCLAIM', isGlobal: true, loggedBy: toID(this.ticket.claimed)});
+				this.addText(`This ticket is now claimed by ${this.ticket.claimed}.`, user);
 			} else {
+				const oldClaimed = this.ticket.claimed;
 				this.ticket.claimed = null;
 				this.lastUnclaimedStart = Date.now();
-				this.modnote(`This ticket is no longer claimed.`, user);
+				this.room.modlog({action: 'TICKETUNCLAIM', isGlobal: true, loggedBy: toID(oldClaimed)});
+				this.addText(`This ticket is no longer claimed.`, user);
 				notifyStaff();
 			}
 			tickets[this.ticket.userid] = this.ticket;
@@ -190,20 +194,20 @@ export class HelpTicket extends Rooms.RoomGame {
 		if (!(user.id in this.playerTable)) return;
 		this.removePlayer(user);
 		if (!this.ticket.open) return;
-		this.modnote(`${user.name} is no longer interested in this ticket.`, user);
+		this.room.modlog({action: 'TICKETABANDON', isGlobal: true, loggedBy: user.id});
+		this.addText(`${user.name} is no longer interested in this ticket.`, user);
 		if (this.playerCount - 1 > 0) return; // There are still users in the ticket room, dont close the ticket
 		this.close(!!(this.firstClaimTime), user);
 		return true;
 	}
 
-	modnote(text: string, user?: User) {
+	addText(text: string, user?: User) {
 		if (user) {
 			this.room.addByUser(user, text);
 		} else {
 			this.room.add(text);
 		}
 		this.room.update();
-		this.room.modlog(text);
 	}
 
 	getButton() {
@@ -211,12 +215,12 @@ export class HelpTicket extends Rooms.RoomGame {
 		const creator = (
 			this.ticket.claimed ? Utils.html`${this.ticket.creator}` : Utils.html`<strong>${this.ticket.creator}</strong>`
 		);
-		const ticketUser = Users.get(this.ticket.userid);
 		return (
 			`<a class="button ${notifying}" href="/help-${this.ticket.userid}"` +
-			` ${this.getPreview()}>${creator}${ticketUser?.language ? ` <small>(${ticketUser.language})</small>` : ``}: ${this.ticket.type}</a> `
+			` ${this.getPreview()}>Help ${creator}: ${this.ticket.type}</a> `
 		);
 	}
+
 	getPreview() {
 		if (!this.ticket.active) return `title="The ticket creator has not spoken yet."`;
 		const hoverText = [];
@@ -241,7 +245,8 @@ export class HelpTicket extends Rooms.RoomGame {
 		this.ticket.open = false;
 		tickets[this.ticket.userid] = this.ticket;
 		writeTickets();
-		this.modnote(staff ? `${staff.name} closed this ticket.` : `This ticket was closed.`, staff);
+		this.room.modlog({action: 'TICKETCLOSE', isGlobal: true, loggedBy: staff?.id || 'unknown' as ID});
+		this.addText(staff ? `${staff.name} closed this ticket.` : `This ticket was closed.`, staff);
 		notifyStaff();
 		this.room.pokeExpireTimer();
 		for (const ticketGameUser of Object.values(this.playerTable)) {
@@ -306,7 +311,8 @@ export class HelpTicket extends Rooms.RoomGame {
 
 	deleteTicket(staff: User) {
 		this.close('deleted', staff);
-		this.modnote(`${staff.name} deleted this ticket.`, staff);
+		this.room.modlog({action: 'TICKETDELETE', isGlobal: true, loggedBy: staff.id});
+		this.addText(`${staff.name} deleted this ticket.`, staff);
 		delete tickets[this.ticket.userid];
 		writeTickets();
 		notifyStaff();
@@ -1147,7 +1153,19 @@ export const commands: ChatCommands = {
 					void (reportRoom as GameRoom).uploadReplay(user, connection, 'forpunishment');
 				}
 			} else if (reportTargetType === 'user') {
-				reportTargetInfo = `Reported user: <strong class="username">${reportTarget}</strong>`;
+				reportTargetInfo = `Reported user: <strong class="username">${reportTarget}</strong><p></p>`;
+
+				const commonBattles = getCommonBattles(
+					toID(reportTarget), Users.get(reportTarget),
+					ticket.userid, Users.get(ticket.userid)
+				);
+
+				if (!commonBattles.length) {
+					reportTargetInfo += Utils.html`There are no common battles between '${reportTarget}' and '${ticket.creator}'.`;
+				} else {
+					reportTargetInfo += Utils.html`Showing ${commonBattles.length} common battle(s) between '${reportTarget}' and '${ticket.creator}': `;
+					reportTargetInfo += commonBattles.map(roomid => Utils.html`<a href=/${roomid}>${roomid.replace(/^battle-/, '')}`);
+				}
 			}
 			let helpRoom = Rooms.get(`help-${user.id}`) as ChatRoom | null;
 			if (!helpRoom) {
@@ -1169,7 +1187,8 @@ export const commands: ChatCommands = {
 				helpRoom.game = new HelpTicket(helpRoom, ticket);
 			}
 			const ticketGame = helpRoom.getGame(HelpTicket)!;
-			ticketGame.modnote(`${user.name} opened a new ticket. Issue: ${ticket.type}`, user);
+			helpRoom.modlog({action: 'TICKETOPEN', isGlobal: true, loggedBy: user.id, note: ticket.type});
+			ticketGame.addText(`${user.name} opened a new ticket. Issue: ${ticket.type}`, user);
 			this.parse(`/join help-${user.id}`);
 			if (!(user.id in ticketGame.playerTable)) {
 				// User was already in the room, manually add them to the "game" so they get a popup if they try to leave
@@ -1275,7 +1294,7 @@ export const commands: ChatCommands = {
 				this.privateModAction(displayMessage);
 			}
 
-			this.globalModlog(`TICKETBAN`, targetUser || userid, ` by ${user.name}${(target ? `: ${target}` : ``)}`);
+			this.globalModlog(`TICKETBAN`, targetUser || userid, target);
 			for (const userObj of affected) {
 				const userObjID = (typeof userObj !== 'string' ? userObj.getLastId() : toID(userObj));
 				const targetTicket = tickets[userObjID];
@@ -1306,7 +1325,7 @@ export const commands: ChatCommands = {
 
 			const affected = HelpTicket.unban(target);
 			this.addModAction(`${affected} was ticket unbanned by ${user.name}.`);
-			this.globalModlog("UNTICKETBAN", toID(target), ` by ${user.id}`);
+			this.globalModlog("UNTICKETBAN", toID(target));
 			if (targetUser) targetUser.popup(`${user.name} has ticket unbanned you.`);
 		},
 		unbanhelp: [`/helpticket unban [user] - Ticket unbans a user. Requires: % @ &`],

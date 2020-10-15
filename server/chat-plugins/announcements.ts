@@ -56,7 +56,7 @@ export const commands: ChatCommands = {
 			target = target.trim();
 			if (room.battle) return this.errorReply(this.tr("Battles do not support announcements."));
 
-			const text = Chat.filter(this, target, user, room, connection);
+			const text = this.filter(target);
 			if (target !== text) return this.errorReply(this.tr("You are not allowed to use filtered words in announcements."));
 
 			const supportHTML = cmd === 'htmlcreate';
@@ -105,7 +105,7 @@ export const commands: ChatCommands = {
 					room.minorActivity = null;
 				}, (timeout * 60000));
 				room.add(`The announcement timer was turned on: the announcement will end in ${timeout} minute${Chat.plural(timeout)}.`);
-				this.modlog('announcement TIMER', null, `${timeout} minutes`);
+				this.modlog('ANNOUNCEMENT TIMER', null, `${timeout} minutes`);
 				return this.privateModAction(`The announcement timer was set to ${timeout} minute${Chat.plural(timeout)} by ${user.name}.`);
 			} else {
 				if (!this.runBroadcast()) return;

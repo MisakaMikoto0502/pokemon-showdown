@@ -1,6 +1,6 @@
 /*
  * Poll chat plugin
- * By Asheviere and Zarel.
+ * By bumbadadabum and Zarel.
  */
 import {Utils} from '../../lib/utils';
 
@@ -375,7 +375,11 @@ export const commands: ChatCommands = {
 				curRoom.minorActivityQueue!.splice(slot - 1, 1);
 				if (!curRoom.minorActivityQueue?.length) curRoom.minorActivityQueue = null;
 
-				curRoom.modlog(`DELETEQUEUE: by ${user}: ${slot}`);
+				curRoom.modlog({
+					action: 'DELETEQUEUE',
+					loggedBy: user.id,
+					note: slot.toString(),
+				});
 				curRoom.sendMods(this.tr`(${user.name} deleted the queued poll in slot ${slot}.)`);
 				curRoom.update();
 				if (update) this.parse(`/j view-pollqueue-${curRoom}`);

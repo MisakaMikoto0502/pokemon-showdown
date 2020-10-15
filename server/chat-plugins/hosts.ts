@@ -199,7 +199,7 @@ export const commands: ChatCommands = {
 				IPTools.addRange(range);
 			}
 
-			this.globalModlog('IPRANGE ADD', null, `by ${user.id}: added ${successes} IP ranges`);
+			this.globalModlog('IPRANGE ADD', null, `added ${successes} IP ranges`);
 			return this.sendReply(`Successfully added ${successes} IP ranges!`);
 		},
 		addhelp: [
@@ -221,7 +221,7 @@ export const commands: ChatCommands = {
 				void IPTools.removeRange(range.minIP, range.maxIP);
 				removed++;
 			}
-			this.globalModlog('IPRANGE REMOVE', null, `by ${user.id}: ${removed} IP ranges`);
+			this.globalModlog('IPRANGE REMOVE', null, `${removed} IP ranges`);
 			return this.sendReply(`Removed ${removed} IP ranges!`);
 		},
 		removehelp: [
@@ -248,7 +248,7 @@ export const commands: ChatCommands = {
 			};
 			void IPTools.addRange(range);
 			const renameInfo = `IP range at '${rangeString}' to ${range.host}`;
-			this.globalModlog('DATACENTER RENAME', null, `by ${user.id}: ${renameInfo}`);
+			this.globalModlog('DATACENTER RENAME', null, renameInfo);
 			return this.sendReply(`Renamed the ${renameInfo}.`);
 		},
 		renamehelp: [
@@ -356,7 +356,7 @@ export const commands: ChatCommands = {
 		this.globalModlog(
 			removing ? 'REMOVEHOSTS' : 'ADDHOSTS',
 			null,
-			`by ${user.id}: ${hosts.length} hosts to category '${type}'`
+			`${hosts.length} hosts to category '${type}'`
 		);
 		return this.sendReply(`${removing ? 'Removed' : 'Added'} ${hosts.length} hosts!`);
 	},
@@ -377,7 +377,7 @@ export const commands: ChatCommands = {
 	markshared(target, room, user) {
 		if (!target) return this.parse('/help markshared');
 		checkCanPerform(this, user, 'globalban');
-		let [ip, note] = this.splitOne(target);
+		const [ip, note] = this.splitOne(target);
 		if (!IPTools.ipRegex.test(ip)) return this.errorReply("Please enter a valid IP address.");
 
 		if (Punishments.sharedIps.has(ip)) return this.errorReply("This IP is already marked as shared.");
@@ -391,10 +391,8 @@ export const commands: ChatCommands = {
 		}
 
 		Punishments.addSharedIp(ip, note);
-		note = ` (${note})`;
-
-		this.privateGlobalModAction(`The IP '${ip}' was marked as shared by ${user.name}.${note}`);
-		this.globalModlog('SHAREDIP', ip, ` by ${user.name}${note}`);
+		this.privateGlobalModAction(`The IP '${ip}' was marked as shared by ${user.name}. (${note})`);
+		this.globalModlog('SHAREDIP', null, note, ip);
 	},
 	marksharedhelp: [
 		`/markshared [IP], [owner/organization of IP] - Marks an IP address as shared.`,
@@ -411,7 +409,7 @@ export const commands: ChatCommands = {
 		Punishments.removeSharedIp(target);
 
 		this.privateGlobalModAction(`The IP '${target}' was unmarked as shared by ${user.name}.`);
-		this.globalModlog('UNSHAREDIP', target, ` by ${user.name}`);
+		this.globalModlog('UNSHAREDIP', null, null, target);
 	},
 	unmarksharedhelp: [`/unmarkshared [IP] - Unmarks a shared IP address. Requires @ &`],
 
@@ -437,7 +435,7 @@ export const commands: ChatCommands = {
 			Punishments.addBlacklistedSharedIp(ip, reason);
 
 			this.privateGlobalModAction(`The IP '${ip}' was blacklisted from being marked as shared by ${user.name}.`);
-			this.globalModlog('SHAREDIP BLACKLIST', ip, ` by ${user.name}: ${reason.trim()}`);
+			this.globalModlog('SHAREDIP BLACKLIST', ip, reason.trim());
 		},
 		remove(target, room, user) {
 			if (!target) return this.parse(`/help nomarkshared`);
@@ -450,7 +448,7 @@ export const commands: ChatCommands = {
 			Punishments.removeBlacklistedSharedIp(target);
 
 			this.privateGlobalModAction(`The IP '${target}' was unblacklisted from being marked as shared by ${user.name}.`);
-			this.globalModlog('SHAREDIP UNBLACKLIST', target, ` by ${user.name}`);
+			this.globalModlog('SHAREDIP UNBLACKLIST', target);
 		},
 		view() {
 			return this.parse(`/join view-sharedipblacklist`);
